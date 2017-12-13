@@ -1,3 +1,7 @@
+# To run the script from (e.g.) gm2gpvm01:/gm2/app/users/glukicov/DQ_DB/scripts
+# useconda 
+# python readgm2onlineDB.py 
+
 import psycopg2
 import json
 
