@@ -12,13 +12,13 @@ with open('dbconnection.json', 'r') as f:
 # create a connection to the database using info from the json file
 cnx = psycopg2.connect(user=dbconf['user'],
                                   host=dbconf['host'],
-                                  database=dbconf['dbname'], port=dbconf['port'])
+                                  database=dbconf['dbname'], port=dbconf['port'], schema=dbconf['schema'])
 
 # query the database and obtain the result as python objects
 cur=cnx.cursor()
 
 # channel is where you switch to your device/channel of interest
-cur.execute("select time, value from g2sc_values where channel='calo1temps' limit 10")
+cur.execute("select * from slow_control_data where scid=946 limit 10;")
 
 # fetch all the rows
 rows = cur.fetchall()
