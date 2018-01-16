@@ -120,6 +120,7 @@ print 'Timestamp', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('
 #Switching to DQC space to write the HV status: 
 cur.execute("set schema 'gm2dq';")
 
+cur.execute("insert into tracker_hv values ('{1,1,1}', 8183, 11);")
 
 
 ###========================CLOSE CONNECTION===============================##

@@ -1,6 +1,6 @@
 {
-"user": "gm2_reader",
-"password":"gm2_4_reader",
+"user": "gm2_writer",
+"password":"gm2_4_writer",
 "host" : "g2db-priv",
 "dbname" : "gm2_online_prod",
 "port" : 5433
