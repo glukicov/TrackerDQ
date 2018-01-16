@@ -53,50 +53,56 @@ for item in rows:
 for i_value in range(len(keys)):
         nameID[keys[i_value]] = values[i_value]
 
-#Sort dictionary by string name [e.g. first=HVSTATUS_T1_M0, last=HVSTATUS_T2_M7]
+#Sort dictionary by string name [e.g. first=HVSTATUS_T1_M0/1151, last=HVSTATUS_T2_M7/953]
+#M0-M7 in T1 [1151-1158], M0-M7 in T2 [946-953]
 nameID = OrderedDict(sorted(nameID.items(), key=lambda x: x[1]))
 
-limit=20  # for testing 
+limit=8  # for testing XXX 
 
-timeStamp=[[0 for i_cord in xrange(statationN)  ] for i in xrange(1)]  #HV status is recorded every ~5 mins [T1/T2 offset by ~5s]
-#M0-M7 in T1 [1151-1158] e.g (1,1,1,1,1,1,1)
-#M0-M7 in T2 [946-953]
-HV_statusStations=[ [0 for i_cord in xrange(statationN)  ] for i in xrange(1)]
+timeStamp=[0 for i_cord in xrange(statationN) ]  #HV status is recorded every ~5 mins [T1/T2 offset by ~5s]
+HV_statusStations=[0 for i_cord in xrange(statationN) ]  #e.g(1111 1111)
 
-tmpStatus=''
+tmpStatus="" #tmp status holder
 
 for i_station in range(0, statationN):
-	scidFirst=nameID.keys()[i_station+moduleN]
-	scidLast=nameID.keys()[(moduleN-1)+moduleN]
-	curCommand = "select * from slow_control_data where (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC limit " + str(limit) + " ;"  
+	print "i_station=", i_station
+	scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
+	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
+	# Select entries for modules in this station, ordered in time, limit to xx
+	curCommand = "select * from slow_control_data where (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time DESC limit " + str(limit) + " ;"  
 	cur.execute(curCommand)
 	rows = cur.fetchall()
 	print curCommand
 	for i_module in range(0, moduleN):
+		#current module ID [the returned list is not guaranteed to be in order]
 		scidModule=nameID.keys()[i_module+i_station*(moduleN)]
+		#cycle through returned modules IDs until the right one
 		for item in rows:
 			if (int(item[1])==scidModule): # getting the right module
+				#if on
 				if (int(item[2])==255):        
-					tmpStatus.append(1)
+					tmpStatus=tmpStatus + "1"
+				#if off
 				else:
-					tmpStatus.append(0)
+					tmpStatus=tmpStatus + "0"
 
-	HV_statusStations[i_station][0]=tmpStatus
+	# assemble full "8 bit" status for the station  
+	HV_statusStations[i_station]=tmpStatus
 	
 	#Timestamps are the same for all modules in that station 
-	timeStamp[i_station][0]=int(item[3]) #epoch timestamp
+	timeStamp[i_station]=int(item[3]) #epoch timestamp
+	tmpStatus="" # reset
 
-	print 'Tracker 1 HV status: ', HV_statusStation_1	[0]
-	print 'Timestamp', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('%Y-%m-%d %H:%M:%S')
-   
-###========================WRITE HV STATUS: DQC===============================##
+print 'Tracker 1 HV status: ', HV_statusStations[0]
+print 'Tracker 2 HV status: ', HV_statusStations[1]
+print 'Timestamp 1', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('%Y-%m-%d %H:%M:%S')
+print 'Timestamp 2', datetime.datetime.fromtimestamp(int(timeStamp[1])).strftime('%Y-%m-%d %H:%M:%S')
+meanTime = int( ( timeStamp[0] + timeStamp[1] ) / 2) 
+print 'Mean Timestamp: ', datetime.datetime.fromtimestamp(int(meanTime)).strftime('%Y-%m-%d %H:%M:%S')
 
-
-#Switching to DQC space to write the HV status: 
-cur.execute("set schema 'gm2dq';")
-
-
-cur.execute("insert into tracker_hv values ('{11111111,11111111,00000000}', 1516124045)")
+#"Write HV status and time to the table in the gm2dq schema  
+insCommand = "insert into gm2dq.tracker_hv values (B'"+str(HV_statusStations[0]) + "' , B'" + str(HV_statusStations[1]) + "' , "  +str(meanTime)  + ") ;" 
+cur.execute(str(insCommand))
 cnx.commit()
 
 
@@ -137,6 +143,12 @@ cnx.close()
 
 # CREATE TABLE tracker_hv (
 #     hv_status  integer ARRAY[3],
+#     time integer
+# );
+
+# CREATE TABLE tracker_hv (
+#     station_1  BIT(8),
+#     station_2  BIT(8),
 #     time integer
 # );
 
