@@ -1,11 +1,11 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
 # *   Created: 13 December 2017
-# *   Modified: 15 January 2018
+# *   Modified: 16 January 2018
 # * /
 
 # Read the HV status (from the online DB) and put the status to a 
-# DQ Table (e.g. 'HV status') in the production DB
+# DQ Table ('HV_status') in the online DB
 
 # To run the script from (e.g.) g2be1:/home/daq/glukicov/TrackerDQ 
 # 1) python HVDQ.py
@@ -13,8 +13,7 @@
 import psycopg2  #db query
 import json     # dbconnetion.json
 from collections import OrderedDict # sort dictionaries
-import sys # concatenating string 
-import datetime
+import datetime #for testing [epoch time -> UTC]
 
 ###========================OPEN CONNECTION===============================##
 dbconf = None
@@ -57,62 +56,38 @@ for i_value in range(len(keys)):
 #Sort dictionary by string name [e.g. first=HVSTATUS_T1_M0, last=HVSTATUS_T2_M7]
 nameID = OrderedDict(sorted(nameID.items(), key=lambda x: x[1]))
 
-#Pull HV values for T1_M0 based on its scid,
-# and covert ON (255) = 1 or else to 0 
-scid=nameID.keys()[0]
-timeStamp=[]
-HV_statusModules=[]
+limit=20  # for testing 
 
-## Get 10 latest ones XXX
-cur.execute("select * from slow_control_data where scid=1151 ORDER BY time ASC limit 10;")
-rows = cur.fetchall()
-for item in rows:
-	timeStamp.append(int(item[3])) #epoch timestamp
-	if (int(item[2])==255):
-		HV_statusModules.append(1)
-	else:
-		HV_statusModules.append(0)
+timeStamp=[[0 for i_cord in xrange(statationN)  ] for i in xrange(1)]  #HV status is recorded every ~5 mins [T1/T2 offset by ~5s]
+#M0-M7 in T1 [1151-1158] e.g (1,1,1,1,1,1,1)
+#M0-M7 in T2 [946-953]
+HV_statusStations=[ [0 for i_cord in xrange(statationN)  ] for i in xrange(1)]
 
-print HV_statusModules
-print timeStamp
+tmpStatus=''
 
-timeStamp=[]
-HV_statusModules=[]
-HV_statusStation=[]
-
-#For station 1 (T1):
-# Check 10 latest entries for all modules
-# get first scid from the sorted list
-
-scidFirst=nameID.keys()[0]
-scidLast=nameID.keys()[7]
-limit=1
-curCommand = "select * from slow_control_data where (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC limit " + str(limit) + " ;"  
-print curCommand
-
-for i_lookup in range(0, limit):	
+for i_station in range(0, statationN):
+	scidFirst=nameID.keys()[i_station+moduleN]
+	scidLast=nameID.keys()[(moduleN-1)+moduleN]
+	curCommand = "select * from slow_control_data where (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC limit " + str(limit) + " ;"  
 	cur.execute(curCommand)
 	rows = cur.fetchall()
-	for item in rows:
-		if (int(item[2])==255):        
-			HV_statusModules.append(1)
-		else:
-			HV_statusModules.append(0)
+	print curCommand
+	for i_module in range(0, moduleN):
+		scidModule=nameID.keys()[i_module+i_station*(moduleN)]
+		for item in rows:
+			if (int(item[1])==scidModule): # getting the right module
+				if (int(item[2])==255):        
+					tmpStatus.append(1)
+				else:
+					tmpStatus.append(0)
 
-	#if all modules reported 1, write 1, if there is 0, write 0 
-	if (0 in HV_statusModules):
-		HV_statusStation.append(0)
-	else:
-		HV_statusStation.append(1)
+	HV_statusStations[i_station][0]=tmpStatus
+	
+	#Timestamps are the same for all modules in that station 
+	timeStamp[i_station][0]=int(item[3]) #epoch timestamp
 
-	#print HV_statusModules
-	#print timeStamp
-	HV_statusModules=[]
-	#Timestamps are the same for all modules - grab the last one
-	timeStamp.append(int(item[3])) #epoch timestamp
-
-print 'Tracker 1 HV status: ', HV_statusStation[0]
-print 'Timestamp', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('%Y-%m-%d %H:%M:%S')
+	print 'Tracker 1 HV status: ', HV_statusStation_1	[0]
+	print 'Timestamp', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('%Y-%m-%d %H:%M:%S')
    
 ###========================WRITE HV STATUS: DQC===============================##
 
@@ -120,7 +95,9 @@ print 'Timestamp', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('
 #Switching to DQC space to write the HV status: 
 cur.execute("set schema 'gm2dq';")
 
-cur.execute("insert into tracker_hv values ('{1,1,1}', 8183, 11);")
+
+cur.execute("insert into tracker_hv values ('{11111111,11111111,00000000}', 1516124045)")
+cnx.commit()
 
 
 ###========================CLOSE CONNECTION===============================##
@@ -153,9 +130,14 @@ cnx.close()
 # !! array size is not enforced in psql/ no unsigned ints in psql....
 
 # CREATE TABLE tracker_hv (
-#     hv_status  integer ARRAY[3],
+#     hv_status  BIGINT ARRAY[3],
 #     run        integer,
 #     subrun     integer
+# );
+
+# CREATE TABLE tracker_hv (
+#     hv_status  integer ARRAY[3],
+#     time integer
 # );
 
 
