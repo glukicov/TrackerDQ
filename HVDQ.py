@@ -105,6 +105,11 @@ insCommand = "insert into gm2dq.tracker_hv values (B'"+str(HV_statusStations[0])
 cur.execute(str(insCommand))
 cnx.commit()
 
+## XXX quick test 
+#"Write HV status and time to the table in the gm2dq schema  
+insCommand = "insert into gm2dq.tracker_hv_3 values (B'1111111111111111111111111111111111111111111111111111111111111111' , B'1111111111111111111111111111111111111111111111111111111111111111', B'1111111111111111111111111111111111111111111111111111111111111111', "  +str(meanTime)  + ") ;" 
+cur.execute(str(insCommand))
+cnx.commit()
 
 ###========================CLOSE CONNECTION===============================##
 
@@ -146,10 +151,11 @@ cnx.close()
 #     time integer
 # );
 
-# CREATE TABLE tracker_hv (
-#     station_1  BIT(8),
-#     station_2  BIT(8),
+
+# CREATE TABLE tracker_hv_3 (
+#     station_1  BIT(64),
+#     station_2  BIT(64),
+#     station_3  BIT(64),
 #     time integer
 # );
-
 
