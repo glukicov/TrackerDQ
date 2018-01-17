@@ -1,11 +1,12 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
 # *   Created: 13 December 2017
-# *   Modified: 16 January 2018
+# *   Modified: 17  January 2018
 # * /
 
-# Read the HV status (from the online DB) and put the status to a 
-# DQ Table ('HV_status') in the online DB
+# Read the tracker HV status from the online DB in gm2tracker_sc schema and put the
+# collated status to a DQ Table 'HV_status' in the gm2dq schema, with the 
+# associated run and subrun number
 
 # To run the script from (e.g.) g2be1:/home/daq/glukicov/TrackerDQ 
 # 1) python HVDQ.py
@@ -15,7 +16,7 @@ import json     # dbconnetion.json
 from collections import OrderedDict # sort dictionaries
 import datetime #for testing [epoch time -> UTC]
 
-###========================OPEN CONNECTION===============================##
+###========================OPEN CONNECTION (as a writer!)===============================##
 dbconf = None
 with open('dbconnection.json', 'r') as f:
     dbconf = json.load(f)
@@ -26,28 +27,25 @@ cnx = psycopg2.connect(user=dbconf['user'],
 # query the database and obtain the result as python objects
 cur=cnx.cursor() 
 
-###========================READ HV STATUS: TRACKER SC===============================##
-
-#Switching to tracker SC space to read the HV status: 
-cur.execute("set schema 'gm2tracker_sc';")
+###========================READ AND RECORD HV STATUS===============================##
 
 #Defining Tracker Constants
-moduleN = 8 # 8 trackers in 2 stations: 1) 8 in C7 2) 8 in C10
+moduleN = 8 # 8 trackers in 2 stations: 1) 8 in C7 (Station ID=#1) 2) 8 in C10 (Station ID=#2) 3) 0 in C1 (Station ID=#0)
 statationN = 2 
 
 #Containers to store a unique relations between module name (e.g.T2_M0) 
-# and its HV id (scid) in dictionary
+# and its HV id (scid) in a dictionary
 nameID={} 
 keys=[] 
 values=[]
 # psql to get ids and modules names from the DB that correspond to HV data 
-cur.execute("select * from slow_control_items where name like '%HV%'")
+cur.execute("SELECT * FROM gm2tracker_sc.slow_control_items WHERE name LIKE '%HV%'")
 rows = cur.fetchall()
 
-#Store ids and names 
+#Store ids and names from the returned query 
 for item in rows:
-	keys.append(int(item[0]))   #scid 
-	values.append(str(item[1])) #name
+	keys.append(int(item[0]))   #scid (e.g. 1151)
+	values.append(str(item[1])) #name (e.g. HVSTATUS_T1_M0)
 
 #Add to un-sorted dictionary
 for i_value in range(len(keys)):
@@ -65,27 +63,23 @@ HV_statusStations=[0 for i_cord in xrange(statationN) ]  #e.g(1111 1111)
 tmpStatus="" #tmp status holder
 
 for i_station in range(0, statationN):
-	print "i_station=", i_station
+	print "i_station=", i_station # XXX testing 
 	scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
 	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
 	# Select entries for modules in this station, ordered in time, limit to xx
-	curCommand = "select * from slow_control_data where (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time DESC limit " + str(limit) + " ;"  
+	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) AND (value < 255 AND value > 0) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
 	cur.execute(curCommand)
-	rows = cur.fetchall()
-	print curCommand
+	rows = cur.fetchall()  # retuned query 
+	print curCommand  # XXX testing 
 	for i_module in range(0, moduleN):
-		#current module ID [the returned list is not guaranteed to be in order]
+		#current module ID [the returned list is not guaranteed to be in "module name order"]
 		scidModule=nameID.keys()[i_module+i_station*(moduleN)]
 		#cycle through returned modules IDs until the right one
 		for item in rows:
 			if (int(item[1])==scidModule): # getting the right module
-				#if on
-				if (int(item[2])==255):        
-					tmpStatus=tmpStatus + "1"
-				#if off
-				else:
-					tmpStatus=tmpStatus + "0"
-
+				# Decimal -> Binary (255 -> 11111111 etc. )    
+				tmpStatus=tmpStatus + format(int(item[2]), '08b')
+				print tmpStatus
 	# assemble full "8 bit" status for the station  
 	HV_statusStations[i_station]=tmpStatus
 	
@@ -93,23 +87,17 @@ for i_station in range(0, statationN):
 	timeStamp[i_station]=int(item[3]) #epoch timestamp
 	tmpStatus="" # reset
 
-print 'Tracker 1 HV status: ', HV_statusStations[0]
-print 'Tracker 2 HV status: ', HV_statusStations[1]
-print 'Timestamp 1', datetime.datetime.fromtimestamp(int(timeStamp[0])).strftime('%Y-%m-%d %H:%M:%S')
-print 'Timestamp 2', datetime.datetime.fromtimestamp(int(timeStamp[1])).strftime('%Y-%m-%d %H:%M:%S')
-meanTime = int( ( timeStamp[0] + timeStamp[1] ) / 2) 
-print 'Mean Timestamp: ', datetime.datetime.fromtimestamp(int(meanTime)).strftime('%Y-%m-%d %H:%M:%S')
-
-#"Write HV status and time to the table in the gm2dq schema  
-insCommand = "insert into gm2dq.tracker_hv values (B'"+str(HV_statusStations[0]) + "' , B'" + str(HV_statusStations[1]) + "' , "  +str(meanTime)  + ") ;" 
-cur.execute(str(insCommand))
-cnx.commit()
-
-## XXX quick test 
-#"Write HV status and time to the table in the gm2dq schema  
-insCommand = "insert into gm2dq.tracker_hv_3 values (B'1111111111111111111111111111111111111111111111111111111111111111' , B'1111111111111111111111111111111111111111111111111111111111111111', B'1111111111111111111111111111111111111111111111111111111111111111', "  +str(meanTime)  + ") ;" 
-cur.execute(str(insCommand))
-cnx.commit()
+	#Write assembled data to the DQ space for that station:
+	# TODO correlate run/subrun with the timestamp (which table has the info?)
+	# run = timeStamp[i_station] ... 
+	# subrun =  timeStamp[i_station] ... 
+	run = 8101
+	subrun = 5
+	# id [primary key on auto-increment], station #, hv_status, run, subrun
+	insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
+	insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HV_statusStations[i_station]) +"' , " + str(run) + ", " + str(subrun) + ") ;" 
+	cur.execute(str(insCommand))
+	cnx.commit()
 
 ###========================CLOSE CONNECTION===============================##
 
@@ -137,25 +125,11 @@ cnx.close()
 # print rows
 
 
-#Create a table in gm2dq schema:
-# !! array size is not enforced in psql/ no unsigned ints in psql....
-
-# CREATE TABLE tracker_hv (
-#     hv_status  BIGINT ARRAY[3],
-#     run        integer,
-#     subrun     integer
-# );
-
-# CREATE TABLE tracker_hv (
-#     hv_status  integer ARRAY[3],
-#     time integer
-# );
-
-
-# CREATE TABLE tracker_hv_3 (
-#     station_1  BIT(64),
-#     station_2  BIT(64),
-#     station_3  BIT(64),
-#     time integer
+# CREATE TABLE gm2dq.tracker_hv (
+#     id  SERIAL PRIMARY KEY,
+#     station  smallint,
+#     hv_status  BIT(64),
+#     run integer,
+# 	subrun integer
 # );
 
