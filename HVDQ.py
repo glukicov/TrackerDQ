@@ -67,6 +67,7 @@ for i_station in range(0, statationN):
 	scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
 	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
 	# Select entries for modules in this station, ordered in time, limit to xx
+	#TODO change logic 
 	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) AND (value < 255 AND value > 0) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
 	cur.execute(curCommand)
 	rows = cur.fetchall()  # retuned query 
@@ -88,11 +89,14 @@ for i_station in range(0, statationN):
 	tmpStatus="" # reset
 
 	#Write assembled data to the DQ space for that station:
-	# TODO correlate run/subrun with the timestamp (which table has the info?)
-	# run = timeStamp[i_station] ... 
-	# subrun =  timeStamp[i_station] ... 
-	run = 8101
-	subrun = 5
+	# TODO correlate run/subrun with the timestamp
+
+	#From select Subrun, json_data->'Logger'->'Channels'->'0'->'Settings' from gm2daq_odb
+
+	# run = timeStamp[i_station] ...  TODO 
+	# subrun =  timeStamp[i_station] ... TODO
+	run = 7969    # TODO 
+	subrun = 12  # TODO 
 	# id [primary key on auto-increment], station #, hv_status, run, subrun
 	insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
 	insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HV_statusStations[i_station]) +"' , " + str(run) + ", " + str(subrun) + ") ;" 
@@ -133,3 +137,13 @@ cnx.close()
 # 	subrun integer
 # );
 
+
+#####Correlating Run Sunbrun with timestamp ######
+
+#You could access the content of DAQ ODB in table "gm2daq_odb", like the following
+
+#select json_data->'Experiment'->'Security'->'RPC hosts'->'Allowed hosts' from gm2daq_odb ;
+
+#select run_num, json_data->'Runinfo'->'Start time' from gm2daq_odb where run_num = 8000;
+
+# select Subrun, json_data->'Logger'->'Channels'->'0'->'Settings' from gm2daq_odb
