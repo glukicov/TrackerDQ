@@ -1,7 +1,7 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
 # *   Created: 13 December 2017
-# *   Modified: 17  January 2018
+# *   Modified: 17 January 2018
 # * /
 
 # Read the tracker HV status from the online DB in gm2tracker_sc schema and put the
@@ -14,7 +14,37 @@
 import psycopg2  #db query
 import json     # dbconnetion.json
 from collections import OrderedDict # sort dictionaries
-import datetime #for testing [epoch time -> UTC]
+import datetime #epoch time -> UTC
+
+#TODO:
+# 1) Assemble code into functions 
+# 2) Two types: (1) fill-once (to catch-up on old entries) (2) "crone-job" style to run iteratively 
+
+######## HELPER FUNCTIONS ########
+
+#Return Run Number that corresponds to the provided timestamp 
+# Helper function courtesy of Mark 
+def getRunNumber(cur, time):
+
+    runNumber = -1 
+    time = datetime.datetime.fromtimestamp(int(time)).strftime('%Y-%m-%d %H:%M:%S')
+    # sql_str = 'select time, \"Run number\" from runlog where \"Run number\" >= %d and \"Run number\" <= %d order by \"Run number\" ASC'  % (runMin,runMax)
+    curCommand = "SELECT \"Run number\" FROM public.runlog WHERE \"Start time\" <= \""+ str(time).strip()+ "\" AND \"Stop time\" >= \"" + str(time).strip() + "\" ORDER BY \"Run number\" ASC;" 
+    print curCommand
+    try:
+        cur.execute(curCommand)
+        db.commit()
+        if (DBconn.rowcount < 1):
+            print "ERROR: SQL(): getRunNumber() returned no rows"
+        else:    
+            rows = DBconn.fetchall()
+            for row in rows:
+                runNumber = int(row[1])              
+    except:
+        print "SQL(): executeSQL: error"
+               
+    return runNumber    
+
 
 ###========================OPEN CONNECTION (as a writer!)===============================##
 dbconf = None
@@ -88,15 +118,29 @@ for i_station in range(0, statationN):
 	timeStamp[i_station]=int(item[3]) #epoch timestamp
 	tmpStatus="" # reset
 
-	#Write assembled data to the DQ space for that station:
-	# TODO correlate run/subrun with the timestamp
+	#Write assembled data to the DQ space for that station
+	
+	#If no MIDAS info is recorded in the runlog return -1 TODO
+	run = -1 
+	subrun = -1 
+	# Given timestamp, find the run with start and stop times in between the timestamp
+	curCommand = "SELECT \"Run number\" FROM public.runlog WHERE \"Start time\" <= to_timestamp(%d) AND \"Stop time\" >= to_timestamp(%d) ORDER BY \"Run number\" ASC;" % (timeStamp[i_station], timeStamp[i_station])
+	print curCommand
+	cur.execute(curCommand)
+	rows = cur.fetchall()
+	for row in rows:
+		run = int(row[0])
+		print "run=", run  
 
-	#From select Subrun, json_data->'Logger'->'Channels'->'0'->'Settings' from gm2daq_odb
+	#Given timestamp, return the first subrun that has it midas file with date greater than the timestamp
+	curCommand = "SELECT subrun_number FROM public.nearline_processing WHERE midas_file_date >= to_timestamp(%d) ORDER BY midas_file_date ASC limit 1;" % (timeStamp[i_station])
+	print curCommand
+	cur.execute(curCommand)
+	rows = cur.fetchall()
+	for row in rows:
+		subrun = int(row[0])
+		print "subrun=", subrun 
 
-	# run = timeStamp[i_station] ...  TODO 
-	# subrun =  timeStamp[i_station] ... TODO
-	run = 7969    # TODO 
-	subrun = 12  # TODO 
 	# id [primary key on auto-increment], station #, hv_status, run, subrun
 	insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
 	insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HV_statusStations[i_station]) +"' , " + str(run) + ", " + str(subrun) + ") ;" 
