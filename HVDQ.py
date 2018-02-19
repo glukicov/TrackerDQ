@@ -1,12 +1,12 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
 # *   Created: 13 December 2017
-# *   Modified: 17 January 2018
+# *   Modified: 19 February 2018
 # * /
 
 # Read the tracker HV status from the online DB in gm2tracker_sc schema and put the
 # collated status to a DQ Table 'HV_status' in the gm2dq schema, with the 
-# associated run and subrun number
+# associated run and subrun number from the 'subrun_time' table
 
 # To run the script from (e.g.) g2be1:/home/daq/glukicov/TrackerDQ 
 # 1) python HVDQ.py
@@ -17,43 +17,22 @@ from collections import OrderedDict # sort dictionaries
 import datetime #epoch time -> UTC
 
 #TODO:
+# 0) Add arguments e.g. limit
 # 1) Assemble code into functions 
 # 2) Two types: (1) fill-once (to catch-up on old entries) (2) "crone-job" style to run iteratively 
 
 ######## HELPER FUNCTIONS ########
 
-#Return Run Number that corresponds to the provided timestamp 
-# Helper function courtesy of Mark 
-def getRunNumber(cur, time):
-
-    runNumber = -1 
-    time = datetime.datetime.fromtimestamp(int(time)).strftime('%Y-%m-%d %H:%M:%S')
-    # sql_str = 'select time, \"Run number\" from runlog where \"Run number\" >= %d and \"Run number\" <= %d order by \"Run number\" ASC'  % (runMin,runMax)
-    curCommand = "SELECT \"Run number\" FROM public.runlog WHERE \"Start time\" <= \""+ str(time).strip()+ "\" AND \"Stop time\" >= \"" + str(time).strip() + "\" ORDER BY \"Run number\" ASC;" 
-    print curCommand
-    try:
-        cur.execute(curCommand)
-        db.commit()
-        if (DBconn.rowcount < 1):
-            print "ERROR: SQL(): getRunNumber() returned no rows"
-        else:    
-            rows = DBconn.fetchall()
-            for row in rows:
-                runNumber = int(row[1])              
-    except:
-        print "SQL(): executeSQL: error"
-               
-    return runNumber    
 
 
-###========================OPEN CONNECTION (as a writer!)===============================##
+###========================OPEN CONNECTION ======================================##
 dbconf = None
 with open('dbconnection.json', 'r') as f:
-    dbconf = json.load(f)
+	dbconf = json.load(f)
 # create a connection to the database using info from the json file
 cnx = psycopg2.connect(user=dbconf['user'],
-                                  host=dbconf['host'],
-                                  database=dbconf['dbname'], port=dbconf['port'])
+								  host=dbconf['host'],
+								  database=dbconf['dbname'], port=dbconf['port'])
 # query the database and obtain the result as python objects
 cur=cnx.cursor() 
 
@@ -68,40 +47,36 @@ statationN = 2
 nameID={} 
 keys=[] 
 values=[]
-# psql to get ids and modules names from the DB that correspond to HV data 
+
+# get ids and modules names from the DB that correspond to HV data 
 cur.execute("SELECT * FROM gm2tracker_sc.slow_control_items WHERE name LIKE '%HV%'")
 rows = cur.fetchall()
-
-#Store ids and names from the returned query 
 for item in rows:
 	keys.append(int(item[0]))   #scid (e.g. 1151)
 	values.append(str(item[1])) #name (e.g. HVSTATUS_T1_M0)
 
 #Add to un-sorted dictionary
 for i_value in range(len(keys)):
-        nameID[keys[i_value]] = values[i_value]
+		nameID[keys[i_value]] = values[i_value]
 
 #Sort dictionary by string name [e.g. first=HVSTATUS_T1_M0/1151, last=HVSTATUS_T2_M7/953]
 #M0-M7 in T1 [1151-1158], M0-M7 in T2 [946-953]
 nameID = OrderedDict(sorted(nameID.items(), key=lambda x: x[1]))
 
-limit=8  # for testing XXX 
-
 timeStamp=[0 for i_cord in xrange(statationN) ]  #HV status is recorded every ~5 mins [T1/T2 offset by ~5s]
 HV_statusStations=[0 for i_cord in xrange(statationN) ]  #e.g(1111 1111)
 
-tmpStatus="" #tmp status holder
+tmpStatus="" #tmp HV status holder
 
+#Loop over the stations
 for i_station in range(0, statationN):
-	print "i_station=", i_station # XXX testing 
 	scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
 	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
+	
 	# Select entries for modules in this station, ordered in time, limit to xx
-	#TODO change logic 
-	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) AND (value < 255 AND value > 0) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
+	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC LIMIT " + str(8) + " ;"  
 	cur.execute(curCommand)
-	rows = cur.fetchall()  # retuned query 
-	print curCommand  # XXX testing 
+	rows = cur.fetchall() 
 	for i_module in range(0, moduleN):
 		#current module ID [the returned list is not guaranteed to be in "module name order"]
 		scidModule=nameID.keys()[i_module+i_station*(moduleN)]
@@ -110,7 +85,7 @@ for i_station in range(0, statationN):
 			if (int(item[1])==scidModule): # getting the right module
 				# Decimal -> Binary (255 -> 11111111 etc. )    
 				tmpStatus=tmpStatus + format(int(item[2]), '08b')
-				print tmpStatus
+	
 	# assemble full "8 bit" status for the station  
 	HV_statusStations[i_station]=tmpStatus
 	
@@ -118,32 +93,19 @@ for i_station in range(0, statationN):
 	timeStamp[i_station]=int(item[3]) #epoch timestamp
 	tmpStatus="" # reset
 
+	#Get Run and Subrun based on the timestamp
+	curCommand = "SELECT run, subrun from gm2dq.subrun_time WHERE start_time >= to_timestamp(%d) ORDER by start_time ASC limit 1;" % timeStamp[i_station]
+	cur.execute(curCommand)
+	rows = cur.fetchall()
+	for row in rows:
+		run=row[0]
+		subrun=row[1]
+
 	#Write assembled data to the DQ space for that station
-	
-	#If no MIDAS info is recorded in the runlog return -1 TODO
-	run = -1 
-	subrun = -1 
-	# Given timestamp, find the run with start and stop times in between the timestamp
-	curCommand = "SELECT \"Run number\" FROM public.runlog WHERE \"Start time\" <= to_timestamp(%d) AND \"Stop time\" >= to_timestamp(%d) ORDER BY \"Run number\" ASC;" % (timeStamp[i_station], timeStamp[i_station])
-	print curCommand
-	cur.execute(curCommand)
-	rows = cur.fetchall()
-	for row in rows:
-		run = int(row[0])
-		print "run=", run  
-
-	#Given timestamp, return the first subrun that has it midas file with date greater than the timestamp
-	curCommand = "SELECT subrun_number FROM public.nearline_processing WHERE midas_file_date >= to_timestamp(%d) ORDER BY midas_file_date ASC limit 1;" % (timeStamp[i_station])
-	print curCommand
-	cur.execute(curCommand)
-	rows = cur.fetchall()
-	for row in rows:
-		subrun = int(row[0])
-		print "subrun=", subrun 
-
 	# id [primary key on auto-increment], station #, hv_status, run, subrun
 	insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
 	insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HV_statusStations[i_station]) +"' , " + str(run) + ", " + str(subrun) + ") ;" 
+	print insCommand
 	cur.execute(str(insCommand))
 	cnx.commit()
 
@@ -152,42 +114,3 @@ for i_station in range(0, statationN):
 # close communication with the databaes
 cur.close()
 cnx.close()
-
-
-# ##### Some psql shortcuts ####
-# psql -U gm2_reader -h ifdbprod.fnal.gov -d gm2_online_prod -p 5452
-# [connects to the Production DB, which is duplicated from the Online DB]
-
-# \dt  - list all table
-# \dn - list all schemas 
-# \dt gm2tracker_sc.* - list all tables under the Tracker SC schema 
-# set schema 'gm2tracker_sc';
-# set schema 'gm2dq'; 
-
-# select * from slow_control_items where name like '%HV%' limit 10;
-# select * from slow_control_data where scid=946 limit 10; 
-
-#cur.execute("select * from slow_control_data where scid=946 limit 10;")
-# fetch all the rows
-# rows = cur.fetchall()
-# print rows
-
-
-# CREATE TABLE gm2dq.tracker_hv (
-#     id  SERIAL PRIMARY KEY,
-#     station  smallint,
-#     hv_status  BIT(64),
-#     run integer,
-# 	subrun integer
-# );
-
-
-#####Correlating Run Sunbrun with timestamp ######
-
-#You could access the content of DAQ ODB in table "gm2daq_odb", like the following
-
-#select json_data->'Experiment'->'Security'->'RPC hosts'->'Allowed hosts' from gm2daq_odb ;
-
-#select run_num, json_data->'Runinfo'->'Start time' from gm2daq_odb where run_num = 8000;
-
-# select Subrun, json_data->'Logger'->'Channels'->'0'->'Settings' from gm2daq_odb
