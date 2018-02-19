@@ -1,6 +1,5 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
-# *   Created: 13 December 2017
 # *   Modified: 19 February 2018
 # * /
 
@@ -15,17 +14,23 @@ import psycopg2  #db query
 import json     # dbconnetion.json
 from collections import OrderedDict # sort dictionaries
 import datetime #epoch time -> UTC
+import argparse, sys
 
 #TODO:
 # 0) Add arguments e.g. limit
 # 1) Assemble code into functions 
 # 2) Two types: (1) fill-once (to catch-up on old entries) (2) "crone-job" style to run iteratively 
 
-######## HELPER FUNCTIONS ########
+######## HELPER FUNCTIONS AND ARGUMENTS ########
 
+parser = argparse.ArgumentParser(description='psql control')
+parser.add_argument('-l', '--limit', help='limit for the returned query')
+args = parser.parse_args()
+limit = args.limit
 
 
 ###========================OPEN CONNECTION ======================================##
+
 dbconf = None
 with open('dbconnection.json', 'r') as f:
 	dbconf = json.load(f)
@@ -74,7 +79,7 @@ for i_station in range(0, statationN):
 	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
 	
 	# Select entries for modules in this station, ordered in time, limit to xx
-	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC LIMIT " + str(8) + " ;"  
+	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
 	cur.execute(curCommand)
 	rows = cur.fetchall() 
 	for i_module in range(0, moduleN):
@@ -105,7 +110,6 @@ for i_station in range(0, statationN):
 	# id [primary key on auto-increment], station #, hv_status, run, subrun
 	insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
 	insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HV_statusStations[i_station]) +"' , " + str(run) + ", " + str(subrun) + ") ;" 
-	print insCommand
 	cur.execute(str(insCommand))
 	cnx.commit()
 
@@ -114,3 +118,20 @@ for i_station in range(0, statationN):
 # close communication with the databaes
 cur.close()
 cnx.close()
+
+
+#### Creating the tracker_hv table ###
+
+'''
+
+CREATE TABLE gm2dq.tracker_hv (
+    id  SERIAL PRIMARY KEY,
+    station  smallint,
+    hv_status  BIT(64),
+    run integer,
+    subrun integer
+);
+
+'''
+
+
