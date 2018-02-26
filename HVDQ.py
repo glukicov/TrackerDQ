@@ -80,7 +80,7 @@ for i_station in range(0, stationN):
 	# Select entries for modules in this station, ordered in time, limit to xx
 	for i_module in range(0, moduleN):
 		scidModule=nameID.keys()[i_module+i_station*(moduleN)]
-		curCommand = "SELECT value, time FROM gm2tracker_sc.slow_control_data WHERE (scid = " + str(scidModule).strip() + " ) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
+		curCommand = "SELECT value, time FROM gm2tracker_sc.slow_control_data WHERE (scid = " + str(scidModule).strip() + " ) ORDER BY time DESC LIMIT " + str(limit) + " ;"  
 		cur.execute(curCommand)
 		rows = cur.fetchall() 
 
