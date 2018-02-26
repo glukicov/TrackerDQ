@@ -1,6 +1,6 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
-# *   Modified: 19 February 2018
+# *   Modified: 25 February 2018
 # * /
 
 # Read the tracker HV status from the online DB in gm2tracker_sc schema and put the
@@ -17,7 +17,6 @@ import datetime #epoch time -> UTC
 import argparse, sys
 
 #TODO:
-# 0) Add arguments e.g. limit
 # 1) Assemble code into functions 
 # 2) Two types: (1) fill-once (to catch-up on old entries) (2) "crone-job" style to run iteratively 
 
@@ -122,16 +121,12 @@ cnx.close()
 
 #### Creating the tracker_hv table ###
 
-'''
-
-CREATE TABLE gm2dq.tracker_hv (
-    id  SERIAL PRIMARY KEY,
-    station  smallint,
-    hv_status  BIT(64),
-    run integer,
-    subrun integer
-);
-
-'''
+# CREATE TABLE gm2dq.tracker_hv (
+#     id  SERIAL PRIMARY KEY,
+#     station  smallint,
+#     hv_status  BIT(64),
+#     run integer,
+#     subrun integer
+# );
 
 
