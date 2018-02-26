@@ -1,6 +1,6 @@
 # /*
 # *   Gleb Lukicov (g.lukicov@ucl.ac.uk) @ Fermilab
-# *   Modified: 25 February 2018
+# *   Modified: 26 February 2018
 # * /
 
 # Read the tracker HV status from the online DB in gm2tracker_sc schema and put the
@@ -44,7 +44,7 @@ cur=cnx.cursor()
 
 #Defining Tracker Constants
 moduleN = 8 # 8 trackers in 2 stations: 1) 8 in C7 (Station ID=#1) 2) 8 in C10 (Station ID=#2) 3) 0 in C1 (Station ID=#0)
-statationN = 2 
+stationN = 2 
 
 #Containers to store a unique relations between module name (e.g.T2_M0) 
 # and its HV id (scid) in a dictionary
@@ -53,7 +53,7 @@ keys=[]
 values=[]
 
 # get ids and modules names from the DB that correspond to HV data 
-cur.execute("SELECT * FROM gm2tracker_sc.slow_control_items WHERE name LIKE '%HV%'")
+cur.execute("SELECT scid, name FROM gm2tracker_sc.slow_control_items WHERE name LIKE '%HV%' ORDER BY scid DESC")
 rows = cur.fetchall()
 for item in rows:
 	keys.append(int(item[0]))   #scid (e.g. 1151)
@@ -67,34 +67,33 @@ for i_value in range(len(keys)):
 #M0-M7 in T1 [1151-1158], M0-M7 in T2 [946-953]
 nameID = OrderedDict(sorted(nameID.items(), key=lambda x: x[1]))
 
-timeStamp=[0 for i_cord in xrange(statationN) ]  #HV status is recorded every ~5 mins [T1/T2 offset by ~5s]
-HV_statusStations=[0 for i_cord in xrange(statationN) ]  #e.g(1111 1111)
+timeStamp=[0 for i_cord in xrange(stationN) ]  #HV status is recorded every ~5 mins [T1/T2 offset by ~5s]
+HV_statusStations=[0 for i_cord in xrange(stationN) ]  #e.g(1111 1111)
 
 tmpStatus="" #tmp HV status holder
 
 #Loop over the stations
-for i_station in range(0, statationN):
+for i_station in range(0, stationN):
 	scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
 	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
 	
 	# Select entries for modules in this station, ordered in time, limit to xx
-	curCommand = "SELECT * FROM gm2tracker_sc.slow_control_data WHERE (scid>= " + str(scidFirst).strip() + " AND scid<= " + str(scidLast).strip() + " ) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
-	cur.execute(curCommand)
-	rows = cur.fetchall() 
 	for i_module in range(0, moduleN):
-		#current module ID [the returned list is not guaranteed to be in "module name order"]
 		scidModule=nameID.keys()[i_module+i_station*(moduleN)]
+		curCommand = "SELECT value, time FROM gm2tracker_sc.slow_control_data WHERE (scid = " + str(scidModule).strip() + " ) ORDER BY time ASC LIMIT " + str(limit) + " ;"  
+		cur.execute(curCommand)
+		rows = cur.fetchall() 
+
 		#cycle through returned modules IDs until the right one
 		for item in rows:
-			if (int(item[1])==scidModule): # getting the right module
-				# Decimal -> Binary (255 -> 11111111 etc. )    
-				tmpStatus=tmpStatus + format(int(item[2]), '08b')
+			# Decimal -> Binary (255 -> 11111111 etc. )    
+			tmpStatus=tmpStatus + format(int(item[0]), '08b')
 	
 	# assemble full "8 bit" status for the station  
 	HV_statusStations[i_station]=tmpStatus
 	
 	#Timestamps are the same for all modules in that station 
-	timeStamp[i_station]=int(item[3]) #epoch timestamp
+	timeStamp[i_station]=int(item[1]) #epoch timestamp
 	tmpStatus="" # reset
 
 	#Get Run and Subrun based on the timestamp
