@@ -13,7 +13,8 @@
 import psycopg2  #db query
 import json     # dbconnetion.json
 from collections import OrderedDict # sort dictionaries
-import datetime  #epoch time -> UTC
+import datetime
+import time
 import argparse, sys
  
 ######## HELPER FUNCTIONS AND ARGUMENTS ########
@@ -24,7 +25,7 @@ args = parser.parse_args()
 limit = args.limit
 
 
-###========================OPEN CONNECTION ======================================##
+###===============================OPEN CONNECTION ============================================##
 
 dbconf = None
 with open('dbconnection.json', 'r') as f:
@@ -36,7 +37,7 @@ cnx = psycopg2.connect(user=dbconf['user'],
 # query the database and obtain the result as python objects
 cur=cnx.cursor() 	
 
-###========================GET TRACKER MODULE LABELS: ONCE======================================##
+###========================GET TRACKER MODULE LABELS, CONSTANTS, DB QUERY: ONCE======================================##
 
 #Defining Tracker Constants
 moduleN = 8 # 8 trackers in 2 stations: 1) 8 in C7 (Station ID=#1) 2) 8 in C10 (Station ID=#2) 3) 0 in C1 (Station ID=#0)
@@ -63,43 +64,131 @@ for i_value in range(len(keys)):
 # #M0-M7 in T1 [1151-1158], M0-M7 in T2 [946-953]
 nameID = OrderedDict(sorted(nameID.items(), key=lambda x: x[1]))
 
-print nameID
+#Lists to store data from the subrun_time table 
+run=[]
+subrun=[]
+startTS=[]
+endTS=[]
 
+#Lists to store data from the slow_control_data table [HV status per module as binary]
+scid1=[]
+value1=[]
+timestamp1=[]
 
-###======================== GET LATEST SUBRUN TIME ======================================##
+timeHV={} 
+timeKeys=[]
+valuesHV=[]
+
+###======================== INTERACT WITH THE DB ======================================##
 
 #Get Run and Subrun of the latest subrun and its start and end times 
-curCommand = "SELECT run, subrun, start_time, end_time from gm2dq.subrun_time ORDER by end_time DESC limit " + str(limit) + " ;"
+curCommand = "SELECT run, subrun, start_time, end_time from gm2dq.subrun_time ORDER by start_time ASC;"
 cur.execute(curCommand)
 rows = cur.fetchall()
 for row in rows:
-	run=row[0]
-	subrun=row[1]
-	startTime=row[2]  # local time 
-	endTime=row[3]    # local time 
+	run.append(row[0])
+	subrun.append(row[1])
+	# startTime=row[2]  # local time 
+	startTS.append( time.mktime(row[2].timetuple()) ) # UTC TS
+	# endTime=row[3]    # local time 
+	endTS.append( time.mktime(row[3].timetuple()) )  # UTC TS
 
-print run, subrun, startTime, endTime
+# print run[0:16]
+# print subrun[0:16]
+# print startTS[0:16]
+# print endTS[0:16]
 
 
-###======================== BASED ON THE LATEST SUBRUN: FIND HV RECORDS FOR EACH STATION ======================================##
-
-for i_station in range(0, stationN):
-
+#Get all HV records after 12 Feb 2018 (1518415200) - first subrun record 
+for i_station in range(0, 1):
+	HVstatus="" # string to accumulate HV status for station
 	scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
 	scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
-
-	#Select 8 HV records for the given run and subrun 
-	curCommand = "SELECT scid, value, time FROM gm2tracker_sc.slow_control_data WHERE (" +str(scidFirst) + "<= scid AND scid <= " +str(scidLast) + " AND )  ORDER by scid ASC;"
+	curCommand = "SELECT scid, time, value from gm2tracker_sc.slow_control_data WHERE (" +str(scidFirst) + "<= scid AND scid <= " +str(scidLast)+ " AND 1518415200 < time  ) ORDER by time ASC, scid ASC;"
 	cur.execute(curCommand)
 	rows = cur.fetchall()
+	moduleCounter=0
 	for row in rows:
-		scid=row[0] # Module ID (e.g. 1151 == M0 in T1)
-		value=format(int(row[1]), '08b')  # Decimal -> Binary (255 -> 11111111 etc. )    
-		time=datetime.datetime.fromtimestamp(row[2]).strftime('%Y-%m-%d %H:%M:%S')  # UTC time timestamp to local time 
-		print scid, value, time 
+		scid1.append(row[0]) # TODO delete 
+		timestamp=row[1] # UTC timestamp  [need only 1 per station]
+		HVstatus=HVstatus+format(int(row[2]), '08b')  # Decimal -> Binary (255 -> 11111111 etc. )
+		moduleCounter=moduleCounter+1 
+
+		if (moduleCounter==8):
+			timeKeys.append(timestamp)
+			valuesHV.append(HVstatus)
+			HVstatus=""
+			moduleCounter=0
+
+
+print scid1[0:16]
+print timeKeys[1:3]
+print valuesHV[1:3]
 
 
 
+for i_len in range(0, len(run)):
+
+	# startTime = startTS[i_len]
+	# endTime = endTS[i_len]
+
+	# print "i_len= ", i_len
+
+	for i_hv in range(0, len(timeKeys)):
+		if( int(timeKeys[i_hv])>=int(startTS[i_len]) and int(timeKeys[i_hv])<int(endTS[i_len]) ):
+
+			
+			# print "startTS[i_len]= ", datetime.datetime.fromtimestamp(startTS[i_len]).strftime('%Y-%m-%d %H:%M:%S')
+			# print "timeKeys[i_hv]= ", datetime.datetime.fromtimestamp(timeKeys[i_hv]).strftime('%Y-%m-%d %H:%M:%S')
+			# print "endTS[i_len]=   ", datetime.datetime.fromtimestamp(endTS[i_len]).strftime('%Y-%m-%d %H:%M:%S')
+
+			HVstatusDB=valuesHV[i_hv]
+			runDB=run[i_len]
+			subrunDB=subrun[i_len]
+
+			print runDB, subrunDB, HVstatusDB
+
+		
+
+			continue
+
+	# print "i_hv= ", i_hv
+	continue
+
+			
+
+
+
+# for i_limit in range(0, int(limit)):
+# 	# Loop over stations and modules
+# 	for i_station in range(0, 1):
+# 		HVstatus="" # string to accumulate HV status for station
+# 		scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
+# 		scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
+	
+# 			HVstatus=HVstatus+format(int(row[1]), '08b')  # Decimal -> Binary (255 -> 11111111 etc. )    
+# 			#timestamp=row[2]
+# 			# time=datetime.datetime.fromtimestamp(row[2]).strftime('%Y-%m-%d %H:%M:%S')  # UTC time timestamp to local time 
+# 			i=i+1
+# 			print scid		
+
+# 		print "Station ", i_station, HVstatus
+
+
+# #Write assembled data to the DQ space for that station
+# # id [primary key on auto-increment], station #, hv_status, run, subrun
+# insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
+# insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HVstatus) +"' , " + str(run[i_limit]) + ", " + str(subrun[i_limit]) + ") ;" 
+# #print str(insCommand)
+# cur.execute(str(insCommand))
+# cnx.commit()
+
+
+###========================CLOSE CONNECTION===============================##
+
+# close communication with the databaes
+cur.close()
+cnx.close()
 
 
 

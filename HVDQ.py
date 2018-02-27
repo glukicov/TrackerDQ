@@ -129,3 +129,27 @@ cnx.close()
 # );
 
 
+# for i_limit in range(0, int(limit)):
+# 	# Loop over stations and modules
+# 	for i_station in range(0, stationN):
+# 		HVstatus="" # reset HV status per station
+# 		for i_module in range(0, moduleN):
+# 			#Get ID of the current module 
+# 			scidKey = nameID.keys()[i_module+(i_station*moduleN)]
+# 			#Get the HV status of the modules based on its ID and timestamp between subrun end and stop times
+# 			curCommand = "SELECT scid, value, time FROM gm2tracker_sc.slow_control_data WHERE (" +str(scidKey) + "= scid AND " +str(startTS[i_limit]) + "<= time AND time <= " +str(endTS[i_limit]) + " );"
+# 			print curCommand
+# 			cur.execute(curCommand)
+# 			rows = cur.fetchall()
+# 			for row in rows:
+# 				scid=row[0] # Module ID (e.g. 1151 == M0 in T1)
+# 				value=format(int(row[1]), '08b')  # Decimal -> Binary (255 -> 11111111 etc. )    
+# 				timestamp=row[2]
+# 				# time=datetime.datetime.fromtimestamp(row[2]).strftime('%Y-%m-%d %H:%M:%S')  # UTC time timestamp to local time 
+# 				HVstatus=HVstatus + value
+# 				#print scid, value, time, timestamp
+# 				print scid, value, timestamp
+
+# 		print i_station, HVstatus
+
+
