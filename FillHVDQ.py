@@ -8,7 +8,7 @@
 # associated run and subrun number from the 'subrun_time' table
 
 # To run the script from (e.g.) g2be1:/home/daq/glukicov/TrackerDQ 
-# 1) python HVDQ.py
+# 1) python FillHVDQ.py
 
 import psycopg2  #db query
 import json     # dbconnetion.json
@@ -23,7 +23,6 @@ parser = argparse.ArgumentParser(description='psql control')
 parser.add_argument('-l', '--limit', help='limit for the returned query')
 args = parser.parse_args()
 limit = args.limit
-
 
 ###===============================OPEN CONNECTION ============================================##
 
@@ -121,67 +120,56 @@ for i_station in range(0, 1):
 			moduleCounter=0
 
 
-print scid1[0:16]
-print timeKeys[1:3]
-print valuesHV[1:3]
+# print scid1[0:16]
+# print timeKeys[1:3]
+# print valuesHV[1:3]
 
+#Correlated storage of HV-subrun records
+stationDB=[]
+HVstatusDB=[]
+runDB=[]
+subrunDB=[]
 
-
-for i_len in range(0, len(run)):
+#Loop over subrun records to find the HV record that occurred between subrun stop and start time
+for i_len in range(0, int(len(run)/int(limit)) ):
+#for i_len in range(0, 1000):
 
 	# startTime = startTS[i_len]
 	# endTime = endTS[i_len]
 
 	# print "i_len= ", i_len
 
-	for i_hv in range(0, len(timeKeys)):
-		if( int(timeKeys[i_hv])>=int(startTS[i_len]) and int(timeKeys[i_hv])<int(endTS[i_len]) ):
+	i_station = str(1)
 
-			
+	for i_hv in range(0, len(timeKeys)):
+	#for i_hv in range(0, 1000):
+		if( int(timeKeys[i_hv])>=int(startTS[i_len]) and int(timeKeys[i_hv])<int(endTS[i_len]) ):
+	
 			# print "startTS[i_len]= ", datetime.datetime.fromtimestamp(startTS[i_len]).strftime('%Y-%m-%d %H:%M:%S')
 			# print "timeKeys[i_hv]= ", datetime.datetime.fromtimestamp(timeKeys[i_hv]).strftime('%Y-%m-%d %H:%M:%S')
 			# print "endTS[i_len]=   ", datetime.datetime.fromtimestamp(endTS[i_len]).strftime('%Y-%m-%d %H:%M:%S')
 
-			HVstatusDB=valuesHV[i_hv]
-			runDB=run[i_len]
-			subrunDB=subrun[i_len]
+			stationDB.append("1")
+			HVstatusDB.append(valuesHV[i_hv])
+			runDB.append(run[i_len])
+			subrunDB.append(subrun[i_len])
 
-			print runDB, subrunDB, HVstatusDB
-
-		
+			#print runDB, subrunDB, HVstatusDB
 
 			continue
 
 	# print "i_hv= ", i_hv
 	continue
 
-			
-
-
-
-# for i_limit in range(0, int(limit)):
-# 	# Loop over stations and modules
-# 	for i_station in range(0, 1):
-# 		HVstatus="" # string to accumulate HV status for station
-# 		scidFirst=nameID.keys()[i_station*moduleN]  # get ID of the 1st module in the station 
-# 		scidLast=nameID.keys()[(moduleN-1)+moduleN*i_station] #get ID of the last module in the stations
-	
-# 			HVstatus=HVstatus+format(int(row[1]), '08b')  # Decimal -> Binary (255 -> 11111111 etc. )    
-# 			#timestamp=row[2]
-# 			# time=datetime.datetime.fromtimestamp(row[2]).strftime('%Y-%m-%d %H:%M:%S')  # UTC time timestamp to local time 
-# 			i=i+1
-# 			print scid		
-
-# 		print "Station ", i_station, HVstatus
-
+#Zip all data 
+dataDB=zip(stationDB, HVstatusDB, runDB, subrunDB)
+#print dataDB
 
 # #Write assembled data to the DQ space for that station
 # # id [primary key on auto-increment], station #, hv_status, run, subrun
-# insCommand = "INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun)"
-# insCommand = insCommand + "VALUES ( "+ str(i_station+1) +" ,B'"+ str(HVstatus) +"' , " + str(run[i_limit]) + ", " + str(subrun[i_limit]) + ") ;" 
-# #print str(insCommand)
-# cur.execute(str(insCommand))
-# cnx.commit()
+for d in dataDB:
+    cur.execute("INSERT INTO gm2dq.tracker_hv (station, hv_status, run, subrun) VALUES (%s, %s, %s, %s)", d)
+    cnx.commit()
 
 
 ###========================CLOSE CONNECTION===============================##
