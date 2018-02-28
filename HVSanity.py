@@ -94,7 +94,8 @@ for i in range (0, len(hv_status)):
 		print "Spark", hv_status[i]
 		print "Station ", station[i]
 		print "In Run", run[i], " subrun ", subrun[i]
-		cur.execute("SELECT start_time, end_time FROM gm2dq.subrun_time WHERE run =  "+ str(run[i]) +" AND subrun = "+ str(subrun[i])+ " );"
+		curCommand= "SELECT start_time, end_time FROM gm2dq.subrun_time WHERE ( run = "+ str(run[i]) +" AND subrun = "+ str(subrun[i])+ " );"
+		cur.execute(curCommand)
 		rows = cur.fetchall()
 		for row in rows:
 			startTime = row[0]
