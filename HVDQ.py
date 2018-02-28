@@ -129,6 +129,15 @@ cnx.close()
 # );
 
 
+# CREATE TABLE gm2dq.tracker_hv_test (
+#     id  SERIAL PRIMARY KEY,
+#     station  smallint,
+#     hv_status  BIT(64),
+#     run integer,
+#     subrun integer
+# );
+
+
 # for i_limit in range(0, int(limit)):
 # 	# Loop over stations and modules
 # 	for i_station in range(0, stationN):
