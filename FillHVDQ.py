@@ -150,3 +150,14 @@ cnx.close()
 
 
 
+#### Creating the tracker_hv table ###
+
+# CREATE TABLE gm2dq.tracker_hv (
+#     id  SERIAL PRIMARY KEY,
+#     station  smallint,
+#     hv_status  BIT(64),
+#     run integer,
+#     subrun integer
+# );
+
+

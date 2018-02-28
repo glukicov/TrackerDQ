@@ -81,33 +81,26 @@ allOff = "0000000000000000000000000000000000000000000000000000000000000000"
 allOn =  "1111111111111111111111111111111111111111111111111111111111111111"
 
 
-# print hv_status[2600]
-
-# item = hv_status[0]
-
-# if (item ==  allOff):
-# 	print "All off"
-# elif (item == allOn):
-# 	print "All on"
-# else:
-# 	print "Spark"
-# 	print item
-
 for i in range (0, len(hv_status)):
 	if (hv_status[i] ==  allOff):
-		l=1
+		k=0
 		#print "All off"
 		#print hv_status[i]
 	elif (hv_status[i] == allOn):
-		k=2
+		k=1
 		#print "All on"
 		#print hv_status[i]
 	else:
 		print "Spark", hv_status[i]
+		print "Station ", station[i]
 		print "In Run", run[i], " subrun ", subrun[i]
+		cur.execute("SELECT start_time, end_time FROM gm2dq.subrun_time WHERE run =  "+ str(run[i]) +" AND subrun = "+ str(subrun[i])+ " );"
+		rows = cur.fetchall()
+		for row in rows:
+			startTime = row[0]
+			endTime = row[0]
 
-
-print len(hv_status)
+		print "Occurred between ", startTime, " and ", endTime
 
 	
 
